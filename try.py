@@ -18,15 +18,31 @@ load_dotenv()
 STORE_URL = os.getenv("WC_STORE_URL", "https://pk.nexgentrend.com")
 CK = os.getenv("WC_CONSUMER_KEY")
 CS = os.getenv("WC_CONSUMER_SECRET")
-VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
-CHAT_MODEL = os.getenv("GROQ_CHAT_MODEL", "llama-3.3-70b-versatile")
+VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+CHAT_MODEL = os.getenv("GROQ_CHAT_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
+st.set_page_config(page_title="Nexgen Assistant", page_icon="🛒")
+
+# --- Sidebar Theme Choice (Option 2 vs Option 4) ---
+st.sidebar.title("⚙️ Settings")
+theme_option = st.sidebar.selectbox(
+    "Choose Background Theme:",
+    ["Option 2: Modern Dark Mode (#121212)", "Option 4: Cool Slate (#eef2f7)"]
+)
+
+if "Option 2" in theme_option:
+    bg_color = "#121212"
+    text_color = "#f0f0f0"
+    welcome_bg = "linear-gradient(135deg, #1b1512, #2a211c)"
+else:
+    bg_color = "#eef2f7"
+    text_color = "#1a1a1a"
+    welcome_bg = "linear-gradient(135deg, #ffffff, #d9e2ec)"
 
 def _clean_product_name(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
-
 
 def _normalize_content(content: Any) -> str:
     if content is None:
@@ -49,14 +65,12 @@ def _normalize_content(content: Any) -> str:
         return str(content)
     return str(content)
 
-
 def _to_langchain_message(message: dict[str, Any]):
     role = str(message.get("role", "user")).lower()
     content = _normalize_content(message.get("content", ""))
     if role == "assistant":
         return AIMessage(content=content)
     return HumanMessage(content=content)
-
 
 def fetch_products():
     """Fetch live products from WooCommerce REST API."""
@@ -109,7 +123,7 @@ def fetch_products():
         }
     return products
 
-@st.cache_data(ttl=300)  # refresh every 5 minutes
+@st.cache_data(ttl=300)
 def get_products():
     return fetch_products()
 
@@ -142,8 +156,7 @@ def describe_uploaded_image(image_bytes: bytes, mime_type: str = "image/jpeg") -
     except Exception:
         return ""
 
-    content = response.content
-    return _normalize_content(content)
+    return _normalize_content(response.content)
 
 @tool
 def get_product(name: str) -> str:
@@ -161,7 +174,6 @@ def get_product(name: str) -> str:
         return f"product not found. Available: {', '.join(products)}"
     return str(p)
 
-
 @tool
 def list_products() -> str:
     """List all available products with their prices, stock, rating and image URL."""
@@ -175,7 +187,6 @@ def list_products() -> str:
         for name, info in products.items()
     ]
     return "\n".join(lines)
-
 
 @tool
 def add_to_cart(product_name: str, quantity: int = 1) -> str:
@@ -220,119 +231,50 @@ def get_agent():
         tools=[get_product, list_products, add_to_cart],
         system_prompt=(
             "You are a product assistant for an online tech store. "
-            "Always detect the language the user is writing in (for example Arabic, English, "
-            "Urdu/Roman Urdu) and respond in that exact same language. If the user switches "
-            "language mid-conversation, switch your reply language too. Never mix languages "
-            "in a single reply unless the user did. Product names, prices, and numbers can stay "
-            "as-is, but all surrounding text must match the user's language. "
-            "Always call the get_product tool with the user's best-guess product name — "
-            "do not ask the user to confirm the name before calling the tool. "
-            "If the user asks to see all products, or the full catalog, call the list_products tool. "
-            "If the user wants to add a product to their cart or buy it, call the add_to_cart tool "
-            "with the exact product name. Always share the checkout link you get back. "
-            "Only ask for clarification if a tool returns a 'not found' result. "
-            "When answering, only include the specific attribute(s) the user asked about — "
-            "never add extra columns or fields they did not ask for. "
-            "If the user asks about a single attribute only (for example just availability/stock, "
-            "just price, or just rating) for one or more products, answer as a simple plain-text list "
-            "(one line per product), not a table. "
-            "Only use a Markdown table when the user asks for the full catalog, or explicitly asks to "
-            "compare multiple attributes (like price AND stock AND rating) across several products. "
-            "In that case, include only the columns relevant to what was asked, in this fixed order "
-            "when applicable: Product, Price, Stock, Rating — never add an index/number column. "
-            "If a rating value is 'N/A', keep it exactly as 'N/A' — do not translate it. "
-            "When the user asks for products in a specific category or use case (for example skin care, "
-            "makeup tools, haircare), only include products whose name genuinely matches that category. "
-            "Do not include a product just because it fits a price or other filter — the category or "
-            "use-case match matters first. If you are not sure a product belongs to the category the "
-            "user asked about, leave it out rather than guessing. "
-            "When the user asks about, or you recommend, one or a small number (up to 5) of "
-            "specific products, always include each product's photo right after its name using "
-            "Markdown image syntax: ![Product Name](image_url). Use the exact image_url the tool "
-            "gave you — never invent one, and skip the image entirely if image_url is missing or None. "
-            "Do not include images inside a full-catalog Markdown table — only in list/plain-text replies. "
-            "If the user's message says a photo was uploaded and gives a description of it, treat that "
-            "description as the search query: find the best-matching product(s) in the catalog and "
-            "report their availability, price, and rating, including their photos as described above."
+            "Always detect the language the user is writing in and respond in that exact same language. "
+            "Always call the get_product tool with the user's best-guess product name. "
+            "If the user asks to see all products, call the list_products tool. "
+            "If the user wants to add a product to their cart or buy it, call the add_to_cart tool."
         ),
     )
 
 agent = get_agent()
 
-st.set_page_config(page_title="Nexgen Assistant", page_icon="🛒")
-
-st.markdown("""
+# Dynamic Styling based on selection
+st.markdown(f"""
 <style>
-    #MainMenu, footer, header {visibility: hidden;}
-    div[class*="viewerBadge"] {
-        display: none !important;
-    }
-    a[href*="streamlit.io"] {
-        display: none !important;
-    }
-    .block-container {padding-top: 1rem; padding-bottom: 1rem;}
+    #MainMenu, footer, header {{visibility: hidden;}}
+    div[class*="viewerBadge"] {{ display: none !important; }}
+    a[href*="streamlit.io"] {{ display: none !important; }}
+    .block-container {{padding-top: 1rem; padding-bottom: 1rem;}}
     
-    .stChatMessage {
-        border-radius: 14px;
-        padding: 4px 10px;
-        max-width: 100%;
-        overflow-x: hidden;
-    }
-    div[data-testid="stChatMessageContent"] {
-        font-size: 14px;
-    }
-    .stApp {
-        background: linear-gradient(135deg, #f9f4ee 0%, #f2e7d8 100%);
-    }
-    .welcome-box {
-        background: linear-gradient(135deg, #1b1512, #2a211c);
-        color: white;
+    .stApp {{
+        background-color: {bg_color};
+        color: {text_color};
+    }}
+    .welcome-box {{
+        background: {welcome_bg};
+        color: {'white' if 'Option 2' in theme_option else '#1a1a1a'};
         padding: 16px;
         border-radius: 12px;
         margin-bottom: 14px;
         text-align: center;
         border-bottom: 3px solid #e07b39;
-    }
-    .welcome-box h3 {
+        border: {'1px solid #444' if 'Option 2' in theme_option else '1px solid #ccc'};
+    }}
+    .welcome-box h3 {{
         margin: 0 0 4px 0;
         font-size: 17px;
-        color: #f0c14b;
-    }
-    .welcome-box p {
+        color: #e07b39;
+    }}
+    .welcome-box p {{
         margin: 0;
         font-size: 13px;
         opacity: 0.9;
-    }
-    .stChatInputContainer, div[data-testid="stChatInput"] button {
+    }}
+    .stChatInputContainer, div[data-testid="stChatInput"] button {{
         border-color: #e07b39 !important;
-    }
-    .stChatMessage table {
-        width: 100%;
-        table-layout: fixed;
-        border-collapse: collapse;
-    }
-    .stChatMessage table td, .stChatMessage table th {
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        white-space: normal;
-        padding: 8px 10px;
-    }
-    .stChatMessage table th,
-    .stChatMessage table td {
-        width: auto;
-    }
-    .stChatMessage table th:first-child,
-    .stChatMessage table td:first-child {
-        min-width: 35%;
-    }
-    @media (max-width: 480px) {
-        .stChatMessage table {
-            font-size: 11px;
-        }
-        .stChatMessage table th, .stChatMessage table td {
-            padding: 4px 6px !important;
-        }
-    }
+    }}
 </style>
 """, unsafe_allow_html=True)
 
