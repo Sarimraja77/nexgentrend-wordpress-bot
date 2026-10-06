@@ -248,22 +248,30 @@ st.markdown("""
     div[data-testid="stChatMessageContent"] {
         font-size: 14px;
     }
+    .stApp {
+        background-color: #f6efe4;
+    }
     .welcome-box {
-        background: linear-gradient(135deg, #1a1a2e, #16213e);
+        background: linear-gradient(135deg, #1b1512, #2a211c);
         color: white;
         padding: 16px;
         border-radius: 12px;
         margin-bottom: 14px;
         text-align: center;
+        border-bottom: 3px solid #e07b39;
     }
     .welcome-box h3 {
         margin: 0 0 4px 0;
         font-size: 17px;
+        color: #f0c14b;
     }
     .welcome-box p {
         margin: 0;
         font-size: 13px;
-        opacity: 0.85;
+        opacity: 0.9;
+    }
+    .stChatInputContainer, div[data-testid="stChatInput"] button {
+        border-color: #e07b39 !important;
     }
     .stChatMessage table {
         width: 100%;
