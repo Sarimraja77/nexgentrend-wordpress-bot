@@ -244,6 +244,8 @@ def _available_groq_models() -> list[str]:
 VISION_MODEL_CANDIDATES = [
     m for m in dict.fromkeys([
         VISION_MODEL,
+        "qwen/qwen3.8-27b",
+        "qwen/qwen3.6-27b",
         "meta-llama/llama-4-scout-17b-16e-instruct",
         "meta-llama/llama-4-maverick-17b-128e-instruct",
     ]) if m
@@ -308,14 +310,18 @@ def describe_uploaded_image(image_bytes: bytes, mime_type: str = "image/jpeg") -
 
     last_error = ""
     for model_name in candidates:
-        try:
-            response = ChatGroq(model=model_name, temperature=0).invoke([message])
-            text = _normalize_content(response.content).strip()
-            if text:
-                return text, ""
-            last_error = f"{model_name} returned an empty description."
-        except Exception as e:
-            last_error = f"{model_name}: {e}"
+        # Qwen models "think" by default; ask for a direct answer first, retry plainly if rejected.
+        for extra in ({"reasoning_effort": "none"}, {}):
+            try:
+                llm = ChatGroq(model=model_name, temperature=0, max_tokens=1024, **extra)
+                response = llm.invoke([message])
+                text = _normalize_content(response.content)
+                text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+                if text:
+                    return text, ""
+                last_error = f"{model_name} returned an empty description."
+            except Exception as e:
+                last_error = f"{model_name}: {e}"
     return "", last_error
 
 
