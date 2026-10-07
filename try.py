@@ -78,11 +78,15 @@ THEMES = {
     },
 }
 
-with st.expander("🎨 Theme", expanded=False):
-    theme_option = st.selectbox(
+DEFAULT_THEME = "Solid Dark — #121212"
+_theme_names = list(THEMES)
+
+# A single small button (pinned to the top-left corner by the CSS below) that opens the theme list.
+with st.popover("🎨", help="Change color theme"):
+    theme_option = st.radio(
         "Color theme",
-        list(THEMES),
-        help="Choose a full app palette. Warm Sand matches the current brand colors.",
+        _theme_names,
+        index=_theme_names.index(DEFAULT_THEME) if DEFAULT_THEME in _theme_names else 0,
         key="theme_option",
     )
 theme = THEMES[theme_option]
@@ -413,6 +417,18 @@ st.markdown(f"""
         background-attachment: fixed !important;
     }}
     #MainMenu, footer, header {{visibility: hidden;}}
+    [data-testid="stPopover"] {{
+        position: fixed; top: 10px; left: 10px; z-index: 1000; width: auto !important;
+    }}
+    [data-testid="stPopover"] > div > button, [data-testid="stPopover"] button {{
+        width: 40px; height: 40px; min-height: 40px; padding: 0; border-radius: 50%;
+        background: {theme["surface"]}; color: {theme["text"]};
+        border: 1px solid {theme["border"]}; box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        font-size: 18px;
+    }}
+    [data-testid="stPopover"] button svg,
+    [data-testid="stPopover"] button [data-testid="stIconMaterial"] {{ display: none; }}
+    [data-testid="stElementContainer"]:has([data-testid="stPopover"]) {{ height: 0; margin: 0; }}
     div[class*="viewerBadge"] {{ display: none !important; }}
     a[href*="streamlit.io"] {{ display: none !important; }}
     .block-container {{max-width: 1100px; padding-top: 1.5rem; padding-bottom: 5rem;}}
