@@ -603,7 +603,7 @@ for msg in st.session_state.history:
         if msg["role"] == "assistant" and msg.get("products"):
             render_product_cards(msg["products"], get_products())
 
-def handle_query(user_message: str):
+def handle_query(user_message: str, is_photo_query: bool = False):
     """Send a message to the agent and render the reply with safe error fallback."""
     if not user_message or not user_message.strip():
         return
@@ -642,11 +642,14 @@ def handle_query(user_message: str):
         or re.search(r"\b(all|every|list|show)\b.*\b(products?|items?)\b", normalized_query)
         or re.search(r"\b(products?|items?)\b.*\b(list|catalog|catalogue)\b", normalized_query)
     )
-    mentioned_products = (
-        list(products)
-        if is_catalog_request
-        else find_product_matches(f"{user_message}\n{reply}", products)
-    )
+    if is_photo_query:
+        # The photo prompt itself says "catalog" and holds a long description, so only trust
+        # the products the assistant actually named in its reply.
+        mentioned_products = find_product_matches(reply, products)
+    elif is_catalog_request:
+        mentioned_products = list(products)
+    else:
+        mentioned_products = find_product_matches(f"{user_message}\n{reply}", products)
     st.session_state.history.append(
         {"role": "assistant", "content": reply, "products": mentioned_products}
     )
@@ -704,7 +707,7 @@ if uploaded_photo is not None:
                     f"{description}\n\nPlease find the best-matching product(s) in our catalog "
                     "and tell me about their availability, price, and rating."
                 )
-                handle_query(photo_query)
+                handle_query(photo_query, is_photo_query=True)
             else:
                 st.warning("Photo search is unavailable right now. Please try text search.")
                 if vision_error:
