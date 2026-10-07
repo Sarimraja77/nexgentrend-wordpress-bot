@@ -27,4 +27,5 @@ dependencies = [
     "fastapi>=0.141.1",
     "uvicorn>=0.52.4",
     "requests>=2.34.2",
+    "pillow-heif>=1.8.0",
 ]
