@@ -1,0 +1,21 @@
+name: Keep Streamlit app awake
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # every 4 hours
+  workflow_dispatch:         # lets you run it by hand to test
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install playwright
+      - run: playwright install --with-deps chromium
+      - run: python wake_app.py
+        env:
+          STREAMLIT_APP_URL: https://nexgentrend-wp.streamlit.app
