@@ -4,6 +4,7 @@ import re
 import os
 import base64
 import html
+import uuid
 from io import BytesIO
 from typing import Any, TypedDict
 
@@ -26,6 +27,23 @@ except Exception:
 
 # WooCommerce Credentials & URL
 STORE_URL = os.getenv("WC_STORE_URL", "https://pk.nexgentrend.com")
+
+# The storefront keeps its own cart in the browser, so bot links go to the home page with
+# ?ngt_add=... and app.js adds the product (and opens the cart or checkout).
+CART_MARKER_RE = re.compile(r"\[\[SYNC_CART:(\d+):(\d+):([a-f0-9]+)\]\]")
+
+
+def strip_cart_marker(text: str) -> str:
+    return re.sub(r"\[\[SYNC_CART:[^\]]*\]\]", "", text or "").strip()
+
+
+def cart_link(product_id, quantity: int = 1, token: str = "", checkout: bool = False) -> str:
+    """Link that adds a product to the storefront's own cart."""
+    url = f"{STORE_URL}/?ngt_add={product_id}&ngt_qty={quantity}"
+    if token:
+        url += f"&ngt_t={token}"
+    return url + ("#checkout" if checkout else "")
+
 CK = os.getenv("WC_CONSUMER_KEY")
 CS = os.getenv("WC_CONSUMER_SECRET")
 VISION_MODEL = os.getenv("GROQ_VISION_MODEL")
@@ -389,9 +407,10 @@ def add_to_cart(product_name: str, quantity: int = 1) -> str:
         return "Sorry, this product cannot be added to cart right now."
 
     product_id = p["variant_id"]
-    checkout_url = f"{STORE_URL}/checkout/?add-to-cart={product_id}&quantity={quantity}"
+    token = uuid.uuid4().hex[:12]  # one-time id so the same request is never added twice
+    checkout_url = cart_link(product_id, quantity, token, checkout=True)
 
-    marker = f"[[SYNC_CART:{product_id}:{quantity}]]"
+    marker = f"[[SYNC_CART:{product_id}:{quantity}:{token}]]"
     return f"Added {quantity} x {cleaned_name} to cart! Complete your order here: {checkout_url} {marker}"
 
 @st.cache_resource
@@ -586,7 +605,7 @@ def render_product_cards(product_names: list[str], products: dict[str, dict[str,
                 if product_id:
                     st.link_button(
                         "Add to cart",
-                        f"{STORE_URL}/checkout/?add-to-cart={product_id}&quantity=1",
+                        cart_link(product_id, 1),
                         use_container_width=True,
                     )
 
@@ -599,7 +618,7 @@ if "last_processed_photo" not in st.session_state:
 for msg in st.session_state.history:
     avatar = "🧑" if msg["role"] == "user" else "🛒"
     with st.chat_message(msg["role"], avatar=avatar):
-        st.markdown(msg["content"])
+        st.markdown(strip_cart_marker(msg["content"]))
         if msg["role"] == "assistant" and msg.get("products"):
             render_product_cards(msg["products"], get_products())
 
@@ -654,20 +673,21 @@ def handle_query(user_message: str, is_photo_query: bool = False):
         {"role": "assistant", "content": reply, "products": mentioned_products}
     )
 
-    match = re.search(r"\[\[SYNC_CART:(\d+):(\d+)\]\]", reply)
-    display_reply = re.sub(r"\[\[SYNC_CART:\d+:\d+\]\]", "", reply).strip()
+    match = CART_MARKER_RE.search(reply)
+    display_reply = strip_cart_marker(reply)
 
     with st.chat_message("assistant", avatar="🛒"):
         st.markdown(display_reply)
         render_product_cards(mentioned_products, products)
         if match:
-            product_id, qty = match.group(1), match.group(2)
+            product_id, qty, token = match.group(1), match.group(2), match.group(3)
             components.html(f"""
                 <script>
                 window.top.postMessage({{
                     type: 'ADD_TO_WOOCOMMERCE_CART',
                     productId: '{product_id}',
-                    quantity: {qty}
+                    quantity: {qty},
+                    token: '{token}'
                 }}, '*');
                 </script>
             """, height=0)
